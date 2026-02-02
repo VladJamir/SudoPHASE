@@ -309,7 +309,7 @@ END PROCEDURE
 
 **IMPORTANT**: This update **replaces** the standard update on communication intervals. The pheromone update follows the equation:
 ```
-τ_ij(t+1) = (1-ρ_comm)·τ_ij(t) + Δτ_ij
+τ_ij(t+1) = (1-ρ_comm)·τ_ij(t) + ρ_comm(Δτ_ij^1 + Δτ_ij^2 + Δτ_ij^3)
 where Δτ_ij = Δτ_ij^1 + Δτ_ij^2 + Δτ_ij^3
 and ρ_comm is the communication evaporation rate (typically 0.05)
 ```

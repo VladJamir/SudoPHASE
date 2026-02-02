@@ -133,10 +133,11 @@ private:
 	void ExecuteWorkerThreadWait(std::unique_lock<std::mutex>& lock);
 	
 	int saFrequency;  // Frequency of Simulated Annealing application (0 = disabled)
+	bool saAlwaysAccept; // If true, always accept SA solution regardless of quality
 	
 public:
 	ParallelSudokuAntSystem(int numSubColonies, int numAntsPerColony, 
-	                        float q0, float rho, float pher0, float bestEvap, int safreq = 0);
+	                        float q0, float rho, float pher0, float bestEvap, int safreq = 0, bool saAlwaysAccept = false);
 	~ParallelSudokuAntSystem();
 	
 	virtual bool Solve(const Board& puzzle, float maxTime);

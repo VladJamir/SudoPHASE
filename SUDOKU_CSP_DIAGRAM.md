@@ -217,3 +217,10 @@ Sudoku is a constraint satisfaction problem where:
 
 
 
+
+
+
+
+
+
+

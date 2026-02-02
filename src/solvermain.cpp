@@ -88,6 +88,7 @@ int main( int argc, char *argv[] )
 	float rho = a.GetArg("rho", 0.9f);  // ACS rho (used in Alg 0 and Alg 2)
 	float evap = a.GetArg("evap", 0.005f );
 	int saFreq = a.GetArg("safreq", 0);  // Simulated Annealing frequency (0 = disabled, e.g., 100 = every 100 iterations)
+	int saAcceptFlag = a.GetArg("saAccept", 0); // 0 = hybrid (default), 1 = always accept SA solution
 	bool blank = a.GetArg("blank", false );
 	bool verbose = a.GetArg("verbose", 0);
 	bool showInitial = a.GetArg("showinitial", 0);
@@ -102,7 +103,7 @@ int main( int argc, char *argv[] )
 	else if ( algorithm == 1 )
 		solver = new BacktrackSearch();
 	else if ( algorithm == 2 )
-		solver = new ParallelSudokuAntSystem( nSubColonies, nAnts, q0, rho, 1.0f/board.CellCount(), evap, saFreq);
+		solver = new ParallelSudokuAntSystem( nSubColonies, nAnts, q0, rho, 1.0f/board.CellCount(), evap, saFreq, saAcceptFlag != 0);
 	else
 		solver = new BacktrackSearch();
 
@@ -130,19 +131,38 @@ int main( int argc, char *argv[] )
 		success = false;
 	}
 	if ( !verbose )
+	{
 		cout << !success << endl << fixed << setprecision(5) << solTime << endl;
+		// Output step count for Algorithm 1 (backtracking) in non-verbose mode
+		if ( algorithm == 1 )
+		{
+			BacktrackSearch* backtrackSolver = dynamic_cast<BacktrackSearch*>(solver);
+			if ( backtrackSolver )
+			{
+				cout << "iterations: " << backtrackSolver->GetStepCount() << endl;
+			}
+		}
+	}
 	else
 	{
 		if ( !success )
 		{
 			cout << "failed in time " << fixed << setprecision(5) << solTime << endl;
-			// Show iterations for algorithms 0 and 2
+			// Show iterations for algorithms 0 and 2, step count for algorithm 1
 			if ( algorithm == 0 )
 			{
 				SudokuAntSystem* antSolver = dynamic_cast<SudokuAntSystem*>(solver);
 				if ( antSolver )
 				{
 					cout << "iterations: " << antSolver->GetIterationsCompleted() << endl;
+				}
+			}
+			else if ( algorithm == 1 )
+			{
+				BacktrackSearch* backtrackSolver = dynamic_cast<BacktrackSearch*>(solver);
+				if ( backtrackSolver )
+				{
+					cout << "iterations: " << backtrackSolver->GetStepCount() << endl;
 				}
 			}
 			else if ( algorithm == 2 )
@@ -161,13 +181,21 @@ int main( int argc, char *argv[] )
 			string outString = solution.AsString( true );
 			cout << outString << endl;
 			cout << "solved in " << fixed << setprecision(5) << solTime << endl;
-			// Show iterations for algorithms 0 and 2
+			// Show iterations for algorithms 0 and 2, step count for algorithm 1
 			if ( algorithm == 0 )
 			{
 				SudokuAntSystem* antSolver = dynamic_cast<SudokuAntSystem*>(solver);
 				if ( antSolver )
 				{
 					cout << "iterations: " << antSolver->GetIterationsCompleted() << endl;
+				}
+			}
+			else if ( algorithm == 1 )
+			{
+				BacktrackSearch* backtrackSolver = dynamic_cast<BacktrackSearch*>(solver);
+				if ( backtrackSolver )
+				{
+					cout << "iterations: " << backtrackSolver->GetStepCount() << endl;
 				}
 			}
 			else if ( algorithm == 2 )

@@ -69,7 +69,3 @@ Solve using Parallel ACS with Simulated Annealing applied every 100 iterations
 
 ./sudokusolver --alg 2 --file instances/logic-solvable/platinumblond.txt --subcolonies 4 --ants 30 --timeout 120 --safreq 100 --verbose
 
-Solve using Parallel ACS with SA using strict improvement policy (original behavior)
-
-./sudokusolver --alg 2 --file instances/logic-solvable/platinumblond.txt --subcolonies 4 --ants 30 --timeout 120 --safreq 100 --sahybrid 0 --verbose
-

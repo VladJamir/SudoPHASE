@@ -2,8 +2,10 @@
 """
 Utility to batch-run all general Sudoku instances through the ACS solver.
 
-Example:
+Examples:
     python scripts/run_general.py --verbose
+    python scripts/run_general.py --instances-root instances/9x9-database --range-start 2020_00004 --range-end 2020_00483 --output results/9x9_00004_00483.csv
+    python scripts/run_general.py --instances-root instances/16x16-database --range-start 16x16_02203 --range-end 16x16_02436 --output results/16x16_02203_02436.csv
 """
 from __future__ import annotations
 
@@ -79,7 +81,7 @@ def iter_instance_files(instances_root: Path) -> Iterable[Path]:
 
 
 def iter_all_instance_files(repo_root: Path) -> Iterable[Path]:
-    """Iterate over general, logic-solvable, and 16x16-database instances."""
+    """Iterate over general, logic-solvable, and database instances."""
     all_files = []
     
     # General instances
@@ -96,9 +98,24 @@ def iter_all_instance_files(repo_root: Path) -> Iterable[Path]:
     database16x16_root = repo_root / "instances" / "16x16-database"
     if database16x16_root.exists():
         all_files.extend(database16x16_root.glob("*.txt"))
+
+    # 9x9 database instances
+    database9x9_root = repo_root / "instances" / "9x9-database"
+    if database9x9_root.exists():
+        all_files.extend(database9x9_root.glob("*.txt"))
+
+    # 25x25 database instances
+    database25x25_root = repo_root / "instances" / "25x25-database"
+    if database25x25_root.exists():
+        all_files.extend(database25x25_root.glob("*.txt"))
     
     if not all_files:
-        raise FileNotFoundError("No instance files found in 'instances/general', 'instances/logic-solvable', or 'instances/16x16-database'.")
+        raise FileNotFoundError(
+            "No instance files found in 'instances/general', "
+            "'instances/logic-solvable', or any database folders "
+            "('instances/16x16-database', 'instances/9x9-database', "
+            "'instances/25x25-database')."
+        )
     
     return sorted(all_files)
 
@@ -208,11 +225,21 @@ def parse_solver_output(stdout: str, stderr: str) -> Tuple[Optional[bool], Optio
     # Combine stdout and stderr for parsing (iterations might be in either)
     all_lines = stdout_lines + stderr_lines
 
-    for line in all_lines:
+    # First pass: look for non-verbose format (success indicator "0" or "1" followed by time)
+    for i, line in enumerate(stdout_lines):
         if line in {"0", "1"} and success is None:
             success = (line == "0")
+            # In non-verbose mode, the time is on the next line
+            if i + 1 < len(stdout_lines):
+                try:
+                    solve_time = float(stdout_lines[i + 1])
+                    break  # Found both success and time, can exit early
+                except (ValueError, IndexError):
+                    pass
             continue
 
+    # Second pass: look for verbose format patterns
+    for line in all_lines:
         solved_match = re.search(r"solved in ([0-9]*\.?[0-9]+)", line)
         if solved_match:
             solve_time = float(solved_match.group(1))
@@ -225,7 +252,8 @@ def parse_solver_output(stdout: str, stderr: str) -> Tuple[Optional[bool], Optio
             success = False
             continue
 
-        # Parse iterations (for algorithms 0 and 2)
+        # Parse iterations (for algorithms 0, 1, and 2)
+        # Algorithm 0 and 2: actual iterations; Algorithm 1: step count
         iter_match = re.search(r"iterations:\s*([0-9]+)", line, re.IGNORECASE)
         if iter_match:
             iterations = int(iter_match.group(1))
@@ -237,12 +265,15 @@ def parse_solver_output(stdout: str, stderr: str) -> Tuple[Optional[bool], Optio
             communication = (comm_match.group(1).lower() == "yes")
             continue
 
-    # Fallback: check stdout for time if not found yet
-    for line in stdout_lines:
-        # Fallback: if a line can be parsed as float and we still do not have a time.
-        if solve_time is None:
+    # Fallback: check stdout for time if not found yet (skip "0" and "1" as they're success indicators)
+    if solve_time is None:
+        for line in stdout_lines:
+            # Skip lines that are success indicators
+            if line in {"0", "1"}:
+                continue
             try:
                 solve_time = float(line)
+                break  # Found a valid time, stop looking
             except ValueError:
                 pass
 
@@ -327,7 +358,7 @@ def summarize_group(size_label: str, fixed_percentage: Optional[int], stats: dic
         "success_rate": round(success_rate, 2),
         "time_mean": average_time,
         "time_std": time_std,
-        "iter_mean": average_iter if (args.alg == 0 or args.alg == 2) else "",
+        "iter_mean": average_iter if (args.alg == 0 or args.alg == 1 or args.alg == 2) else "",
         "with_comm": with_comm if args.alg == 2 else "",
         "without_comm": without_comm if args.alg == 2 else "",
     }
@@ -337,7 +368,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run all general Sudoku instances through the solver.")
     parser.add_argument("--instances-root", default=None, help="Folder containing instances (default: runs instances/general, instances/logic-solvable, and instances/16x16-database)")
     parser.add_argument("--solver", default=None, help="Path to the solver executable (default: auto-detect)")
-    parser.add_argument("--output", default="results/general_metrics.csv", help="Destination CSV file for metrics.")
+    parser.add_argument("--output", default="results/general_metrics.csv", help="Destination CSV file for metrics. Use a distinct path per run (e.g. results/9x9_range1.csv) to avoid overwriting.")
     parser.add_argument("--alg", type=int, default=0, help="Solver algorithm (0=ACS, 1=backtracking).")
     parser.add_argument("--timeout", type=float, default=120.0, help="Timeout per puzzle in seconds (default: 120).")
     parser.add_argument("--ants", type=int, default=None, help="Override number of ants (ACS only).")
@@ -347,6 +378,8 @@ def main() -> int:
     parser.add_argument("--evap", type=float, default=0.005, help="Override ACS evaporation parameter.")
     parser.add_argument("--safreq", type=int, default=0, help="Simulated Annealing frequency - apply SA every n iterations (0 = disabled, default: 0).")
     parser.add_argument("--limit", type=int, default=None, help="Optional cap on number of instances to process.")
+    parser.add_argument("--range-start", dest="range_start", default=None, help="Include only instances with stem >= this (e.g. 2020_00004 or 16x16_02203). Use with --range-end.")
+    parser.add_argument("--range-end", dest="range_end", default=None, help="Include only instances with stem <= this (e.g. 2020_00483 or 16x16_02436). Use with --range-start.")
     parser.add_argument("--puzzle-size", dest="puzzle_sizes", nargs="+", choices=["9x9", "16x16", "25x25"], help="Filter by puzzle size(s), e.g. --puzzle-size 25x25.")
     parser.add_argument("--fixed-percentage", dest="fixed_percentages", type=str, nargs="+", help="Filter by fixed-cell percentage(s). Supports space-separated (e.g., --fixed-percentage 40 45 50) or comma-separated (e.g., --fixed-percentage 40,45,50).")
     parser.add_argument("--solver-timeout", type=float, default=None, help="Wall-clock timeout applied to each solver invocation.")
@@ -354,7 +387,27 @@ def main() -> int:
     parser.add_argument("--verbose", action="store_true", default=True, help="Print per-instance progress to the console (default: True).")
     parser.add_argument("--no-verbose", dest="verbose", action="store_false", help="Disable per-instance progress output.")
     parser.add_argument("--logic-runs", type=int, default=100, help="Number of runs for logic-solvable instances (default: 100). 16x16-database instances always run once by default.")
-    parser.add_argument("--database16x16-runs", type=int, default=1, dest="database16x16_runs", help="Number of runs for 16x16-database instances (default: 1). Use --database16x16-runs 100 to run each puzzle 100 times.")
+    parser.add_argument(
+        "--database16x16-runs",
+        type=int,
+        default=1,
+        dest="database16x16_runs",
+        help="Number of runs for 16x16-database instances (default: 1). Use --database16x16-runs 100 to run each puzzle 100 times.",
+    )
+    parser.add_argument(
+        "--database9x9-runs",
+        type=int,
+        default=1,
+        dest="database9x9_runs",
+        help="Number of runs for 9x9-database instances (default: 1). Use --database9x9-runs 100 to run each puzzle 100 times.",
+    )
+    parser.add_argument(
+        "--database25x25-runs",
+        type=int,
+        default=1,
+        dest="database25x25_runs",
+        help="Number of runs for 25x25-database instances (default: 1). Use --database25x25-runs 100 to run each puzzle 100 times.",
+    )
 
     args = parser.parse_args()
     
@@ -424,8 +477,21 @@ def main() -> int:
             if meta.fixed_percentage is not None and meta.fixed_percentage in allowed_fixed
         ]
 
+    if args.range_start is not None or args.range_end is not None:
+        def in_range(meta: InstanceMetadata) -> bool:
+            stem = meta.path.stem
+            if args.range_start is not None and stem < args.range_start:
+                return False
+            if args.range_end is not None and stem > args.range_end:
+                return False
+            return True
+        metadata_list = [meta for meta in metadata_list if in_range(meta)]
+
     if not metadata_list:
-        print("No instances match the specified filters.", file=sys.stderr)
+        msg = "No instances match the specified filters."
+        if args.range_start is not None or args.range_end is not None:
+            msg += f" (range: {args.range_start or '…'} .. {args.range_end or '…'})"
+        print(msg, file=sys.stderr)
         return 1
 
     if args.limit is not None:
@@ -446,21 +512,31 @@ def main() -> int:
         # Determine if this is a logic-solvable instance (no fixed_percentage)
         # 16x16-database instances can be configured separately
         is_16x16_database = "16x16-database" in str(metadata.path)
-        is_logic_solvable = metadata.fixed_percentage is None and not is_16x16_database
+        is_9x9_database = "9x9-database" in str(metadata.path)
+        is_25x25_database = "25x25-database" in str(metadata.path)
+        is_logic_solvable = (
+            metadata.fixed_percentage is None
+            and not is_16x16_database
+            and not is_9x9_database
+            and not is_25x25_database
+        )
         
         # Determine number of runs based on instance type
         if is_16x16_database:
             num_runs = args.database16x16_runs
+        elif is_9x9_database:
+            num_runs = args.database9x9_runs
+        elif is_25x25_database:
+            num_runs = args.database25x25_runs
         elif is_logic_solvable:
             num_runs = args.logic_runs
         else:
             num_runs = 1  # General instances always run once
         
         # Group key for statistics
-        # For 16x16-database, each instance gets its own group (by instance_id or path)
-        # For other instances, group by (size_label, fixed_percentage)
-        if is_16x16_database:
-            # Use instance_id if available, otherwise use the relative path as unique identifier
+        # For *-database (9x9, 16x16, 25x25), each instance gets its own group → one CSV row per instance.
+        # For other instances, group by (size_label, fixed_percentage).
+        if is_16x16_database or is_25x25_database or is_9x9_database:
             instance_identifier = metadata.instance_id if metadata.instance_id is not None else metadata.relative_path
             group_key = (metadata.size_label, metadata.fixed_percentage, instance_identifier)
         else:
@@ -468,10 +544,10 @@ def main() -> int:
         
         # If group key changed, summarize the previous group
         if current_group_key is not None and group_key != current_group_key:
-            # Extract instance info from previous group key for 16x16-database
+            # Extract instance info from previous group key for per-instance (database) format
             prev_instance_id = None
             prev_instance_path = None
-            if len(current_group_key) == 3:  # 16x16-database format
+            if len(current_group_key) == 3:  # database per-instance format
                 if isinstance(current_group_key[2], int):
                     prev_instance_id = current_group_key[2]
                 else:
@@ -551,10 +627,10 @@ def main() -> int:
 
     output_path = (repo_root / args.output).resolve()
     if current_group_key is not None:
-        # Extract instance info from group key for 16x16-database
+        # Extract instance info from group key for per-instance (database) format
         final_instance_id = None
         final_instance_path = None
-        if len(current_group_key) == 3:  # 16x16-database format
+        if len(current_group_key) == 3:  # database per-instance format
             if isinstance(current_group_key[2], int):
                 final_instance_id = current_group_key[2]
             else:
@@ -578,6 +654,8 @@ def main() -> int:
     print("===== Summary =====")
     print(f"Solver binary   : {solver_path}")
     print(f"Instances folder: {instances_root_display}")
+    if args.range_start is not None or args.range_end is not None:
+        print(f"Instance range  : {args.range_start or '…'} .. {args.range_end or '…'}")
     print(f"Output CSV      : {output_path}")
     print(f"Algorithm       : {args.alg}")
     print(f"Ants            : {actual_ants}")

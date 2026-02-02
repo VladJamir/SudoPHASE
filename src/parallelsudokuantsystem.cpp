@@ -155,7 +155,7 @@ void SubColony::UpdatePheromone()
 // This implements the parallel ACS pheromone update with THREE sources.
 // Called ONLY after communication exchanges.
 //
-// EQUATION: τ_ij(t+1) = (1-ρ)·τ_ij(t) + Δτ_ij
+// EQUATION: τ_ij(t+1) = (1-ρ)·τ_ij(t) + ρ(Δτ_ij^1 + Δτ_ij^2 + Δτ_ij^3)
 //           where ρ is the rate of pheromone evaporation (same as standard ACS)
 //           and Δτ_ij = Δτ_ij^1 + Δτ_ij^2 + Δτ_ij^3
 //
@@ -213,8 +213,8 @@ void SubColony::UpdatePheromoneWithCommunication()
 			if (hasContribution[j])
 			{
 				// Evaporate old pheromone, add new contribution
-				// Using rho for communication update
-				pher[i][j] = pher[i][j] * (1.0f - rho) + contributions[j];
+				// Using rho for communication update (multiply contributions by rho)
+				pher[i][j] = pher[i][j] * (1.0f - rho) + rho * contributions[j];
 			}
 		}
 	}
@@ -320,9 +320,10 @@ void SubColony::UpdateBestSolution(const Board& solution, int score)
 // Constructor: Create the parallel system with N sub-colonies
 // ----------------------------------------------------------------------------
 ParallelSudokuAntSystem::ParallelSudokuAntSystem(int nSubColonies, int numAntsPerColony,
-	float q0, float rho, float pher0, float bestEvap, int safreq)
+	float q0, float rho, float pher0, float bestEvap, int safreq, bool saAlwaysAcceptFlag)
 	: numSubColonies(nSubColonies), maxTime(120.0f),
-	  globalBestScore(0), iterationsCompleted(0), communicationOccurred(false), solTime(0.0f), barrier(0), stopFlag(false), saFrequency(safreq)
+	  globalBestScore(0), iterationsCompleted(0), communicationOccurred(false), solTime(0.0f), barrier(0), stopFlag(false),
+	  saFrequency(safreq), saAlwaysAccept(saAlwaysAcceptFlag)
 {
 	// === INPUT VALIDATION ===
 	// Ensure at least 1 sub-colony
@@ -711,31 +712,40 @@ void ParallelSudokuAntSystem::SubColonyWorker(int colonyId, const Board& puzzle)
 			int cost = sa.Anneal();
 			Board saSolution = sa.GetSolution();
 			
-			// Hybrid acceptance policy: Accept SA solution if:
-			// 1. More cells filled (strict improvement), OR
-			// 2. Same or slightly fewer cells (up to 2 cells less) BUT significantly fewer conflicts (≥5 conflicts reduced)
 			int saScore = saSolution.FixedCellCount();
 			int currentScore = colony->GetBestSolScore();
-			int cellDiff = saScore - currentScore;
 			
 			bool shouldAccept = false;
 			
-			if (cellDiff > 0)
+			if (saAlwaysAccept)
 			{
-				// Case 1: Strict improvement (more cells)
+				// Command-line option forces acceptance regardless of quality
 				shouldAccept = true;
 			}
-			else if (cellDiff >= -2 && cellDiff <= 0)
+			else
 			{
-				// Case 2: Same or slightly fewer cells - check conflict reduction
-				int currentConflicts = CountConflicts(colony->GetBestSol());
-				int saConflicts = CountConflicts(saSolution);
-				int conflictDiff = currentConflicts - saConflicts;
+				// Hybrid acceptance policy (default):
+				// 1. More cells filled (strict improvement), OR
+				// 2. Same or slightly fewer cells (up to 2 cells less) BUT significantly fewer conflicts (≥5 conflicts reduced)
+				int cellDiff = saScore - currentScore;
 				
-				// Accept if conflict reduction is significant (≥5 conflicts eliminated)
-				if (conflictDiff >= 5)
+				if (cellDiff > 0)
 				{
+					// Case 1: Strict improvement (more cells)
 					shouldAccept = true;
+				}
+				else if (cellDiff >= -2 && cellDiff <= 0)
+				{
+					// Case 2: Same or slightly fewer cells - check conflict reduction
+					int currentConflicts = CountConflicts(colony->GetBestSol());
+					int saConflicts = CountConflicts(saSolution);
+					int conflictDiff = currentConflicts - saConflicts;
+					
+					// Accept if conflict reduction is significant (≥5 conflicts eliminated)
+					if (conflictDiff >= 5)
+					{
+						shouldAccept = true;
+					}
 				}
 			}
 			

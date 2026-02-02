@@ -138,3 +138,10 @@ To extract all instances of a specific difficulty category:
 - Instances have been converted to individual `.txt` files in the `instances/paquita-database/` directory
 
 
+
+
+
+
+
+
+
