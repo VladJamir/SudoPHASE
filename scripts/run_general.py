@@ -186,6 +186,8 @@ def build_solver_command(
         cmd.extend(("--evap", str(args.evap)))
     if args.safreq > 0:
         cmd.extend(("--safreq", str(args.safreq)))
+    if getattr(args, "sa_accept", 0) == 1:
+        cmd.extend(("--saAccept", "1"))
     # Always add verbose for algorithms 0 and 2 to get iteration count
     if args.alg == 0 or args.alg == 2 or args.solver_verbose:
         cmd.append("--verbose")
@@ -292,7 +294,7 @@ def parse_solver_output(stdout: str, stderr: str) -> Tuple[Optional[bool], Optio
 
 def write_csv(output_path: Path, rows: Sequence[dict]) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["alg", "puzzle_size", "f%", "instance_id", "instance_path", "ants", "subcolonies", "q0", "rho", "bve", "safreq", "timeout", "success_rate", "time_mean", "time_std", "iter_mean", "with_comm", "without_comm"]
+    fieldnames = ["alg", "puzzle_size", "f%", "instance_id", "instance_path", "ants", "subcolonies", "q0", "rho", "bve", "safreq", "saAccept", "timeout", "success_rate", "time_mean", "time_std", "iter_mean", "with_comm", "without_comm"]
     with output_path.open("w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
@@ -354,6 +356,7 @@ def summarize_group(size_label: str, fixed_percentage: Optional[int], stats: dic
         "rho": args.rho,
         "bve": args.evap,
         "safreq": args.safreq if (args.alg == 0 or args.alg == 2) else "",
+        "saAccept": args.sa_accept if (args.alg == 0 or args.alg == 2) else "",
         "timeout": args.timeout,
         "success_rate": round(success_rate, 2),
         "time_mean": average_time,
@@ -377,6 +380,7 @@ def main() -> int:
     parser.add_argument("--rho", type=float, default=0.9, help="Override ACS rho parameter.")
     parser.add_argument("--evap", type=float, default=0.005, help="Override ACS evaporation parameter.")
     parser.add_argument("--safreq", type=int, default=0, help="Simulated Annealing frequency - apply SA every n iterations (0 = disabled, default: 0).")
+    parser.add_argument("--saAccept", type=int, default=0, dest="sa_accept", choices=[0, 1], help="SA acceptance: 0=conservative/hybrid (default), 1=always accept SA result (CP-like). Applies to alg 0 and alg 2.")
     parser.add_argument("--limit", type=int, default=None, help="Optional cap on number of instances to process.")
     parser.add_argument("--range-start", dest="range_start", default=None, help="Include only instances with stem >= this (e.g. 2020_00004 or 16x16_02203). Use with --range-end.")
     parser.add_argument("--range-end", dest="range_end", default=None, help="Include only instances with stem <= this (e.g. 2020_00483 or 16x16_02436). Use with --range-start.")
@@ -666,6 +670,7 @@ def main() -> int:
     print(f"bve             : {args.evap}")
     if args.alg == 0 or args.alg == 2:
         print(f"SA frequency    : {args.safreq} ({'enabled' if args.safreq > 0 else 'disabled'})")
+        print(f"SA accept       : {args.sa_accept} ({'always accept (CP-like)' if args.sa_accept == 1 else 'conservative/hybrid'})")
     print(f"Timeout         : {args.timeout}s")
     print(f"Total puzzles   : {total}")
     print(f"Succeeded       : {successes}")

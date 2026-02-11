@@ -87,8 +87,8 @@ int main( int argc, char *argv[] )
 	float q0 = a.GetArg("q0", 0.9f);
 	float rho = a.GetArg("rho", 0.9f);  // ACS rho (used in Alg 0 and Alg 2)
 	float evap = a.GetArg("evap", 0.005f );
-	int saFreq = a.GetArg("safreq", 0);  // Simulated Annealing frequency (0 = disabled, e.g., 100 = every 100 iterations)
-	int saAcceptFlag = a.GetArg("saAccept", 0); // 0 = hybrid (default), 1 = always accept SA solution
+	int saFreq = a.GetArg("safreq", 0);  // SA frequency for alg 0 and alg 2 (0 = disabled; e.g. 100 = every 100 iters, CP-like)
+	int saAcceptFlag = a.GetArg("saAccept", 0); // alg 0 and alg 2: 0 = conservative/hybrid (default), 1 = always accept SA result (CP-like)
 	bool blank = a.GetArg("blank", false );
 	bool verbose = a.GetArg("verbose", 0);
 	bool showInitial = a.GetArg("showinitial", 0);
@@ -99,7 +99,7 @@ int main( int argc, char *argv[] )
 	SudokuSolver *solver;
 	
 	if ( algorithm == 0 )
-		solver = new SudokuAntSystem( nAnts, q0, rho, 1.0f/board.CellCount(), evap, saFreq);
+		solver = new SudokuAntSystem( nAnts, q0, rho, 1.0f/board.CellCount(), evap, saFreq, saAcceptFlag != 0);
 	else if ( algorithm == 1 )
 		solver = new BacktrackSearch();
 	else if ( algorithm == 2 )

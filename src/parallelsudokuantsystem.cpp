@@ -704,10 +704,10 @@ void ParallelSudokuAntSystem::SubColonyWorker(int colonyId, const Board& puzzle)
 			colony->bestPher *= (1.0f - colony->bestEvap);
 		}
 		
-		// --- STEP 4: Apply Simulated Annealing (if enabled and at frequency interval) ---
+		// --- STEP 4: Apply Simulated Annealing (CP-adapted implementation, if enabled and at frequency interval) ---
 		if (saFrequency > 0 && iter % saFrequency == 0 && iter != 0)
 		{
-			// Apply SA to best-so-far solution (similar to Codebase 1)
+			// Apply SA to best-so-far solution (same SA as single-colony and CP codebase)
 			SudokuSA sa(colony->GetBestSol());
 			int cost = sa.Anneal();
 			Board saSolution = sa.GetSolution();

@@ -102,7 +102,7 @@ bool SudokuAntSystem::Solve(const Board& puzzle, float maxTime )
 			}
 		}
 		
-		// Apply Simulated Annealing if enabled and at frequency interval
+		// Apply Simulated Annealing (CP-adapted implementation) if enabled and at frequency interval
 		if (!solved && saFrequency > 0 && iter % saFrequency == 0 && iter != 0)
 		{
 			SudokuSA sa(bestSol);
@@ -110,8 +110,18 @@ bool SudokuAntSystem::Solve(const Board& puzzle, float maxTime )
 			Board saSolution = sa.GetSolution();
 			int saScore = saSolution.FixedCellCount();
 			
-			// Update best solution if SA found improvement
-			if (saScore > bestSol.FixedCellCount() || (saScore == bestSol.FixedCellCount() && cost == 0))
+			bool shouldAccept = false;
+			if (saAlwaysAccept)
+			{
+				// Optional always-accept (CP-like): --saAccept 1
+				shouldAccept = true;
+			}
+			else
+			{
+				// Default: accept only when improvement or equal with cost 0 (preserves effectiveness)
+				shouldAccept = (saScore > bestSol.FixedCellCount() || (saScore == bestSol.FixedCellCount() && cost == 0));
+			}
+			if (shouldAccept)
 			{
 				bestSol.Copy(saSolution);
 				if (cost == 0 && saScore == numCells)

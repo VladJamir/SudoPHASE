@@ -49,7 +49,16 @@ __--evap f__ use value f for the best-value evaporation parameter. Default is 0.
 
 __--subcolonies n__ (for alg=2) set number of sub-colonies/threads, default 4
 
-__--safreq n__ (for alg=2) set Simulated Annealing frequency - apply SA every n iterations (0 = disabled, default 0). Example: --safreq 100 applies SA every 100 iterations
+__--safreq n__ (for alg=0 and alg=2) Simulated Annealing frequency – apply SA every n iterations (0 = disabled, default 0). Same implementation as CP codebase. Example: --safreq 100 applies SA every 100 iterations (CP-like).
+
+__--saAccept n__ (for alg=0 and alg=2) SA acceptance policy: 0 = conservative/hybrid (default, accept only when improvement or cost 0 / significant conflict reduction), 1 = always accept SA result (CP-like). Use 1 for CP-identical behaviour.
+
+## Simulated Annealing (SA) integration
+
+SA is the same implementation as the CP (Constraint Programming) codebase: box-preserving swaps, cost = empty cells + row/column duplicates, geometric cooling (0.995), CleanDuplicates post-processing.
+
+- **alg=0 (single-colony):** SA is applied to best-so-far every `safreq` iterations when enabled. Default: accept only when improvement or cost 0 (solved). Use --saAccept 1 for always-accept (CP-like).
+- **alg=2 (parallel):** Each sub-colony applies SA to its best-so-far at the same frequency. Default: hybrid (improvement or ≥5 conflict reduction). Use --saAccept 1 for always-accept (CP-like).
 
 ## Examples
 
@@ -68,4 +77,8 @@ Solve using Parallel ACS with 4 sub-colonies, each with 10 ants, 120 second time
 Solve using Parallel ACS with Simulated Annealing applied every 100 iterations
 
 ./sudokusolver --alg 2 --file instances/logic-solvable/platinumblond.txt --subcolonies 4 --ants 30 --timeout 120 --safreq 100 --verbose
+
+Solve single-colony (alg=0) with SA every 100 iterations (CP-like)
+
+./sudokusolver --alg 0 --file instances/logic-solvable/platinumblond.txt --ants 30 --timeout 120 --safreq 100 --verbose
 

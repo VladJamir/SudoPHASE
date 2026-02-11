@@ -10,7 +10,6 @@
 int SudokuSA::Anneal()
 {
     FillEmptyCells();
-    // cout << "\n" << sol.AsString(true);
     double coolingRate = 0.995;
     double stoppingTemp = 0.01;
     double temp = 1.5;
@@ -19,24 +18,19 @@ int SudokuSA::Anneal()
     int moves = 0;
     int cycles = 0;
 
-    // cout << to_string(currentCost) + "\n";
-
     if (currentCost == 0){
         return currentCost;
     }
-    
-    
+
+
     bestSol.Copy(sol);
     bestCost = currentCost;
-
-    // cout << "\nFrom " + to_string(bestCost) + " to ";
-    
 
     while(temp > stoppingTemp){
         for (int i = 0; i < 1; i++){
             int origCost = currentCost;
             currentSol.Copy(sol);
-            
+
             int newCost = TryRandomSwap(origCost);
             int delta = newCost - currentCost;
             if(delta <= 0){
@@ -46,11 +40,10 @@ int SudokuSA::Anneal()
                     bestSol.Copy(sol);
                     bestCost = currentCost;
                     if (currentCost == 0){
-                        // cout << "\n" << sol.AsString(true);
                         return 0;
                     }
                 }
-                
+
             }
             else{
                 acceptanceProbability = exp(-delta / temp);
@@ -63,36 +56,18 @@ int SudokuSA::Anneal()
                     sol.Copy(currentSol);
                 }
             }
-            
-            // cout << "Temperature = " + to_string(temp) + "; "+ to_string(origCost) + " to " + to_string(currentCost);
+
             if (currentCost > worst)
                 worst = currentCost;
         }
-        
+
         cycles = cycles+1;
         temp = temp* coolingRate;
-        if (temp < stoppingTemp){
-            // cout <<to_string(currentCost) + " Worst: " + to_string(worst) + " Moves: " + to_string(moves) + " Cycles: " + to_string(cycles) +".\n ";
-        }
-        
-        
     }
 
-    
-  
-
-    // for (int i = 0; i < 100; i++){
-    //     string origCost =  to_string(ComputeCost());
-    //     cout << origCost + " to " + to_string(TryRandomSwap());
-        
-    // }
-    //cout << "\n" << sol.AsString(true);
-    //cout << "\n******************\n";
-
-    // abort();
     CleanDuplicates();
     return bestCost;
-    
+
 }
 
 int SudokuSA::ComputeCost()
@@ -171,7 +146,7 @@ void SudokuSA::FillEmptyCells()
             int cellIndex = sol.BoxCell(block, pos);
             if (!sol.IsEmpty(cellIndex))
             {
-                
+
                 int val = sol.GetCell(cellIndex).Index();
                 if (val >= 0 && val < numUnits)
                     used[val] = true;
@@ -465,4 +440,3 @@ void SudokuSA::CleanDuplicates()
         }
     }
 }
-

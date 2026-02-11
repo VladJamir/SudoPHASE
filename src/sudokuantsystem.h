@@ -14,7 +14,8 @@ class SudokuAntSystem : public SudokuSolver, public IAntColony
 	float rho;
 	float pher0;
 	float bestEvap;
-	int saFrequency;  // Simulated Annealing frequency (0 = disabled)
+	int saFrequency;   // Simulated Annealing frequency (0 = disabled)
+	bool saAlwaysAccept;  // If true, always accept SA result (CP-like); else accept only when improvement or cost 0
 	Board bestSol;
 	float bestPher;
 	int bestVal;
@@ -34,8 +35,8 @@ class SudokuAntSystem : public SudokuSolver, public IAntColony
 	float PherAdd(int numCellsFixed);
 
 public:
-	SudokuAntSystem(int numAnts, float q0, float rho, float pher0, float bestEvap, int safreq = 0) : 
-		numAnts(numAnts), q0(q0), rho(rho), pher0(pher0), bestEvap(bestEvap), saFrequency(safreq), iterationsCompleted(0)
+	SudokuAntSystem(int numAnts, float q0, float rho, float pher0, float bestEvap, int safreq = 0, bool saAlwaysAcceptFlag = false) : 
+		numAnts(numAnts), q0(q0), rho(rho), pher0(pher0), bestEvap(bestEvap), saFrequency(safreq), saAlwaysAccept(saAlwaysAcceptFlag), iterationsCompleted(0)
 	{
 		for ( int i = 0; i < numAnts; i++ )
 			antList.push_back(new SudokuAnt(this));
