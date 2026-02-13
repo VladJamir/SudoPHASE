@@ -12,6 +12,59 @@ This document walks through **every source file** in `src/` for your code review
 
 ---
 
+## Paper references in the codebase
+
+Where each reference paper contributes to the implementation. See the dedicated adaptation/verification docs for equation-level mapping.
+
+### 1. Lloyd & Amos — ACS for Sudoku (IEEE Trans. on Games, 2021)
+
+**Reference:** Lloyd, H., & Amos, M. (2021). *Solving Sudoku with Ant Colony Optimization.* IEEE Transactions on Games.  
+**Verification doc:** `ACO_PAPER_VERIFICATION.md`
+
+| Contribution | File(s) | Location |
+|-------------|---------|----------|
+| Pheromone matrix τ[i][k], τ₀ = 1/c | sudokuantsystem.cpp, parallelsudokuantsystem.cpp | InitPheromone: `pher[i][j] = pher0`; solvermain: `1.0f/board.CellCount()` |
+| Value selection (Eq. 1–2): q₀ greedy / roulette | sudokuant.cpp | StepSolution: `parent->random() < parent->Getq0()` → greedy else roulette by pheromone |
+| Local pheromone update (Eq. 3): τ ← 0.9τ + 0.1τ₀ | sudokuant.cpp, sudokuantsystem.cpp, parallelsudokuantsystem.cpp | LocalPheromoneUpdate: `* 0.9f + pher0*0.1f` |
+| Δτ = c/(c−f) (Eq. 5) | sudokuantsystem.cpp, parallelsudokuantsystem.cpp | PherAdd: `numCells/(numCells - cellsFilled)` |
+| Global update only on best-so-far (Eq. 6) | sudokuantsystem.cpp, parallelsudokuantsystem.cpp | UpdatePheromone: only cells in bestSol updated with (1−ρ)τ + ρ·bestPher |
+| Best value evaporation BVE (Eq. 7) | sudokuantsystem.cpp, parallelsudokuantsystem.cpp | Solve / SubColonyWorker: `bestPher *= (1.0f - bestEvap)`; evap from `--evap` (default 0.005) |
+| Fail cells, solution quality | sudokuant.h/cpp | NumCellsFilled = CellCount() - failCells; empty cell → failCells++ |
+| CP after each ant move | board.cpp | SetCell calls ConstrainCell on peers (used by ant’s SetCell in StepSolution) |
+
+---
+
+### 2. Stodola et al. — ACO–SA hybridization (Entropy, 2020)
+
+**Reference:** Stodola, P., Michenka, K., Nohel, J., & Rybanský, M. (2020). *Hybrid Algorithm Based on ACO and SA Applied to the DTSP.* Entropy, 22(8), 884.  
+**Adaptation doc:** `STODOLA_ACO_SA_ADAPTATION.md`
+
+| Contribution | File(s) | Location |
+|-------------|---------|----------|
+| SA applied to best solution; result used for pheromone | sudokuantsystem.cpp, parallelsudokuantsystem.cpp | Solve: SudokuSA sa(bestSol); if accepted bestSol.Copy(saSolution). SubColonyWorker: SA on colony->GetBestSol(); UpdateBestSolution if accepted |
+| sa_freq → saFrequency (periodic SA) | solvermain.cpp, sudokuantsystem.h, parallelsudokuantsystem.h | GetArg("safreq",0) → passed as saFrequency; iter % saFrequency == 0 in Solve / SubColonyWorker |
+| Temperature schedule T_max, T_min, γ | simulatedannealing.cpp | Anneal: temp=1.5, stoppingTemp=0.01, coolingRate=0.995; temp *= coolingRate |
+| Metropolis criterion (Eq. 5) | simulatedannealing.cpp | if delta<=0 accept; else acceptanceProbability = exp(-delta/temp), accept with that prob |
+| SA structure (initial solution, loop, cool) | simulatedannealing.cpp | Anneal: FillEmptyCells; while(temp>stoppingTemp) { TryRandomSwap; accept/reject; cool } |
+
+---
+
+### 3. Yang et al. — RMACO parallelization (World Wide Web, 2016)
+
+**Reference:** Yang, Q., Fang, L., & Duan, X. (2016). *RMACO: a randomly matched parallel ant colony optimization.* World Wide Web, 19(5), 1009–1022.  
+**Adaptation doc:** `RMACO_PARALLEL_ADAPTATION.md`
+
+| Contribution | File(s) | Location |
+|-------------|---------|----------|
+| Ring topology (iteration-best) | parallelsudokuantsystem.cpp | CommunicateRingTopology: colony i → (i+1) mod n; ReceiveIterationBest |
+| Randomly matched (best-so-far) | parallelsudokuantsystem.cpp | GenerateMatchArray (shuffle); CommunicateRandomTopology: matchArray[i] receives from matchArray[(i+n-1)%n] |
+| Match-array | parallelsudokuantsystem.cpp | GenerateMatchArray: iota + shuffle; used in ExecuteMasterThreadTasks and CommunicateRandomTopology |
+| Three-source pheromone (Eq. 5) | parallelsudokuantsystem.cpp | UpdatePheromoneWithCommunication: pherValue1 (local iter-best) + pherValue2 (received iter-best) + pherValue3 (received best-so-far) |
+| Adaptive exchange cycle | parallelsudokuantsystem.cpp | CalculateInterval: iter<200 → 100, else 10; SubColonyWorker: if iter%interval==0 then barrier + exchange + three-source update |
+| Exchange when i % interval == 0 | parallelsudokuantsystem.cpp | SubColonyWorker: interval = CalculateInterval(iter); if (iter % interval == 0) { ... } else { UpdatePheromone; bestPher decay } |
+
+---
+
 ## 1. `valueset.h` — Cell domain (bitmap)
 
 **Role:** One cell’s set of possible values (e.g. {3,5,7}) as a bitmap for fast set operations.
@@ -142,11 +195,11 @@ This document walks through **every source file** in `src/` for your code review
 **cpp — InitSolution (4–16):** Copy puzzle into `sol`, set `iCell=startCell`, `failCells=0`; (re)allocate roulette arrays of size `GetNumUnits()`.
 
 **StepSolution (18–84):**  
-- If current cell **empty** (propagation removed all options) → increment `failCells`.  
+- If current cell **empty** (propagation removed all options) → increment `failCells`. *(Paper: Lloyd & Amos — fail cells; quality = cells filled − fail.)*  
 - Else if current cell **not fixed**:  
-  - **ACS rule (Lloyd & Amos):** With probability `q0`: **greedy** — choose value with max pheromone in cell’s domain; else **roulette** — cumulative pheromone, then random in [0,totPher], pick first option above that.  
+  - **ACS rule (Lloyd & Amos Eq. 1–2):** With probability `q0`: **greedy** — choose value with max pheromone in cell’s domain; else **roulette** — cumulative pheromone, then random in [0,totPher], pick first option above that.  
   - `sol.SetCell(iCell, chosen)` (triggers propagation).  
-  - **Local pheromone update:** `LocalPheromoneUpdate(iCell, choice)` (τ ← 0.9τ + 0.1τ₀).  
+  - **Local pheromone update (Lloyd & Amos Eq. 3):** `LocalPheromoneUpdate(iCell, choice)` (τ ← 0.9τ + 0.1τ₀).  
 - Advance `iCell`; wrap to 0 after last cell.
 
 **Presentation tip:** “One ant = one solution attempt; quality = NumCellsFilled = cells filled minus fail cells.”
@@ -165,11 +218,11 @@ This document walks through **every source file** in `src/` for your code review
 
 **ClearPheromone (18–24):** Free matrix.
 
-**PherAdd (26–30):** Δτ = `numCells/(numCells - cellsFilled)` (Lloyd & Amos Eq. 5).
+**PherAdd (26–30):** Δτ = `numCells/(numCells - cellsFilled)` *(Lloyd & Amos Eq. 5)*.
 
-**UpdatePheromone (32–40):** For each fixed cell in `bestSol`, τ_ij ← (1−ρ)τ_ij + ρ·bestPher (only best-so-far reinforced; Eq. 6).
+**UpdatePheromone (32–40):** For each fixed cell in `bestSol`, τ_ij ← (1−ρ)τ_ij + ρ·bestPher (only best-so-far reinforced) *(Lloyd & Amos Eq. 6)*.
 
-**LocalPheromoneUpdate (42–46):** τ ← 0.9τ + 0.1·pher0 (Eq. 3).
+**LocalPheromoneUpdate (42–46):** τ ← 0.9τ + 0.1·pher0 *(Lloyd & Amos Eq. 3)*.
 
 **Solve (47–172):**  
 - Init pheromone, reset timer, `solTime=0`.  
@@ -177,8 +230,8 @@ This document walks through **every source file** in `src/` for your code review
   - Each ant gets random start cell, then all ants step through all cells (one step per cell per ant).  
   - Find best ant by `NumCellsFilled()`; compute `pherToAdd = PherAdd(bestVal)`.  
   - If `pherToAdd > bestPher`: update `bestSol`, `bestPher`; if all cells filled → solved, record time, break.  
-  - **SA (optional):** If `saFrequency > 0` and `iter % saFrequency == 0` and iter≠0: run `SudokuSA(bestSol).Anneal()`; accept by policy (`saAlwaysAccept` or improvement/cost 0); if accepted and solved, break.  
-  - If not solved: `UpdatePheromone()`, `bestPher *= (1 - bestEvap)` (BVE), increment iter.  
+  - **SA (optional)** *(Stodola et al.: SA on best solution)*: If `saFrequency > 0` and `iter % saFrequency == 0` and iter≠0: run `SudokuSA(bestSol).Anneal()`; accept by policy (`saAlwaysAccept` or improvement/cost 0); if accepted and solved, break.  
+  - If not solved: `UpdatePheromone()`, `bestPher *= (1 - bestEvap)` *(Lloyd & Amos BVE Eq. 7)*, increment iter.  
   - Every 100 iters check timeout; if exceeded set `solTime` and break.  
 - Set `iterationsCompleted`, `ClearPheromone`, return solved.
 
@@ -194,8 +247,8 @@ This document walks through **every source file** in `src/` for your code review
 
 **cpp — Anneal (15–76):**  
 - `FillEmptyCells()` so every box has digits 1..n (box constraint satisfied).  
-- T=1.5, T_min=0.01, cooling 0.995.  
-- **Loop while T > T_min:** One transformation: `TryRandomSwap` (neighbor); Δ = newCost − currentCost. **Metropolis:** if Δ≤0 accept; else accept with prob exp(−Δ/T). Track best; if cost 0 return. Then cool T.  
+- T=1.5, T_min=0.01, cooling 0.995 *(Stodola et al. Table 3: T_max, T_min, γ)*.  
+- **Loop while T > T_min:** One transformation: `TryRandomSwap` (neighbor); Δ = newCost − currentCost. **Metropolis** *(Stodola et al. Eq. 5)*: if Δ≤0 accept; else accept with prob exp(−Δ/T). Track best; if cost 0 return. Then cool T.  
 - `CleanDuplicates()` at end; return bestCost.
 
 **ComputeCost (78–128):** Cost = empty cells + row duplicates + column duplicates (no box duplicates after FillEmptyCells).
@@ -242,10 +295,9 @@ This document walks through **every source file** in `src/` for your code review
 
 **UpdatePheromone (137–152):** Standard ACS: only best-so-far; τ_ij ← (1−ρ)τ_ij + ρ·bestPher for fixed cells in bestSol.
 
-**UpdatePheromoneWithCommunication (161–212):**  
+**UpdatePheromoneWithCommunication (161–212):** *(Yang et al. Eq. 5 — three-source update)*  
 - Compute pherValue1/2/3 from iterationBestScore, receivedIterationBestScore, receivedBestSolScore (PherAdd each).  
-- For each cell: sum contributions from local iteration-best, received iteration-best, received best-so-far into `contributions[digit]`; then for each digit with contribution, τ_ij ← (1−ρ)τ_ij + ρ·contributions[j].  
-- (Yang et al. Eq. 5: three-source update.)
+- For each cell: sum contributions from local iteration-best (Δτ^1), received iteration-best from ring (Δτ^2), received best-so-far from random (Δτ^3) into `contributions[digit]`; then for each digit with contribution, τ_ij ← (1−ρ)τ_ij + ρ·contributions[j].
 
 **LocalPheromoneUpdate (214–217):** Same as Algorithm 0 (0.9τ + 0.1·pher0).
 
@@ -260,13 +312,13 @@ This document walks through **every source file** in `src/` for your code review
 
 **ParallelSudokuAntSystem constructor (311–334):** Validate numSubColonies ≥ 1; create SubColony per colony; init masterRandGen.
 
-**CalculateInterval (356–362):** iter < 200 → 100, else 10 (Yang et al. adaptive exchange).
+**CalculateInterval (356–362):** *(Yang et al. Corollary 3 — adaptive exchange cycle)* iter < 200 → 100, else 10.
 
-**GenerateMatchArray (364–371):** Random permutation of 0..n-1 (iota + shuffle).
+**GenerateMatchArray (364–371):** *(Yang et al. match-array)* Random permutation of 0..n-1 (iota + shuffle).
 
-**CommunicateRingTopology (379–396):** Collect all iteration-bests; colony i sends to (i+1) mod n.
+**CommunicateRingTopology (379–396):** *(Yang et al. Fig. 1 — ring topology)* Collect all iteration-bests; colony i sends to (i+1) mod n.
 
-**CommunicateRandomTopology (412–431):** Collect all best-so-far; colony `matchArray[i]` receives from `matchArray[(i+n-1)%n]`.
+**CommunicateRandomTopology (412–431):** *(Yang et al. Fig. 1 — randomly matched)* Collect all best-so-far; colony `matchArray[i]` receives from `matchArray[(i+n-1)%n]`.
 
 **CountConflicts (446–491):** Row duplicates + column duplicates (for SA acceptance policy).
 
@@ -329,4 +381,12 @@ This document walks through **every source file** in `src/` for your code review
 | Timer, args | timer.h, arguments.h |
 | Solver interface | sudokusolver.h |
 
-Use this document to drive your code review: go file-by-file in the order above and use the section headers and line references to “discuss every line” in a structured way.
+### Paper → code (summary)
+
+| Paper | Main files | Key contributions in code |
+|-------|------------|---------------------------|
+| **Lloyd & Amos** (ACS Sudoku) | sudokuant.cpp, sudokuantsystem.cpp, parallelsudokuantsystem.cpp, solvermain.cpp | Pheromone init (τ₀=1/c), value selection (q₀, greedy/roulette), local update (Eq. 3), PherAdd (Eq. 5), global update (Eq. 6), BVE (Eq. 7), fail cells |
+| **Stodola et al.** (ACO-SA hybrid) | simulatedannealing.cpp, sudokuantsystem.cpp, parallelsudokuantsystem.cpp, solvermain.cpp | SA on best-so-far, saFrequency (sa_freq), T_max/T_min/γ, Metropolis (Eq. 5) |
+| **Yang et al.** (RMACO) | parallelsudokuantsystem.cpp | Ring topology, random match, match-array, three-source update (Eq. 5), CalculateInterval (200/100/10) |
+
+Use this document to drive your code review: go file-by-file in the order above and use the section headers and line references to “discuss every line” in a structured way. The **Paper references in the codebase** section and inline *(Paper: …)* notes show where each reference contributed.
