@@ -14,7 +14,7 @@ class SudokuAntSystem : public SudokuSolver, public IAntColony
 	float rho;
 	float pher0;
 	float bestEvap;
-	int saFrequency;   // Simulated Annealing frequency (0 = disabled)
+	int saFrequency;   // SA frequency (0 = disabled). Paper: sa_freq (Stodola et al.). Set from --safreq; SA every saFrequency iters.
 	bool saAlwaysAccept;  // If true, always accept SA result (CP-like); else accept only when improvement or cost 0
 	Board bestSol;
 	float bestPher;

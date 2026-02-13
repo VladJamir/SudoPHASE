@@ -1,3 +1,8 @@
+// Simulated Annealing for Sudoku. Hybridization procedure (SA on best-so-far, result
+// used for pheromone update) and SA structure (T_max, T_min, gamma, Metropolis) adapted
+// from Stodola et al., "Hybrid Algorithm Based on ACO and SA Applied to DTSP," Entropy 2020.
+// Neighborhood and cost are Sudoku-specific (box-preserving swap, row/col conflicts).
+// See STODOLA_ACO_SA_ADAPTATION.md.
 #include "simulatedannealing.h"
 #include "board.h"
 #include <unordered_set>
@@ -33,6 +38,7 @@ int SudokuSA::Anneal()
 
             int newCost = TryRandomSwap(origCost);
             int delta = newCost - currentCost;
+            // Metropolis criterion (Stodola et al. Eq. 5): accept if delta <= 0, else with prob exp(-delta/T)
             if(delta <= 0){
                 moves = moves+1;
                 currentCost = newCost;
@@ -46,7 +52,7 @@ int SudokuSA::Anneal()
 
             }
             else{
-                acceptanceProbability = exp(-delta / temp);
+                acceptanceProbability = exp(-delta / temp);  // p = exp(-(c'-c)/T)
                 double rnd = (double) rand() / RAND_MAX;
                 if (rnd < acceptanceProbability){
                     moves = moves+1;

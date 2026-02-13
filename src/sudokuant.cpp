@@ -23,11 +23,11 @@ void SudokuAnt::StepSolution()
 	}
 	else if ( !sol.GetCell(iCell).Fixed() )
 	{
-		// make a choice from the options
+		// ACS pseudo-random proportional rule (Lloyd & Amos Eq. 1-2): q0 => greedy, else roulette
 		ValueSet choice = ValueSet(sol.GetNumUnits(), 1);
 		if (parent->random() < parent->Getq0())
 		{
-			// greedy selection
+			// Greedy: argmax_k tau_ik
 			ValueSet best;
 			float maxPher = -1.0f;
 
@@ -44,12 +44,11 @@ void SudokuAnt::StepSolution()
 				choice <<= 1;
 			}
 			sol.SetCell(iCell, best);
-			// do local pheromone update here
-			parent->LocalPheromoneUpdate(iCell, best.Index());
+			parent->LocalPheromoneUpdate(iCell, best.Index());  // Eq. 3: tau <- (1-xi)*tau + xi*tau0, xi=0.1
 		}
 		else
 		{
-			// weighted selection
+			// Roulette: p_ik = tau_ik / sum_j tau_ij
 			float totPher = 0.0f;
 			int numChoices = 0;
 			for (int i = 0; i < sol.GetNumUnits(); i++)
@@ -70,8 +69,7 @@ void SudokuAnt::StepSolution()
 				if (roulette[i] > rouletteVal)
 				{
 					sol.SetCell(iCell, rouletteVals[i]);
-					// do local pheromone update here
-					parent->LocalPheromoneUpdate(iCell, rouletteVals[i].Index());
+					parent->LocalPheromoneUpdate(iCell, rouletteVals[i].Index());  // Eq. 3
 					break;
 				}
 			}

@@ -4,6 +4,8 @@
 
 This document describes the implementation of the Parallel Ant Colony System (Algorithm 2) for Sudoku solving. The parallel version uses multiple independent sub-colonies that communicate periodically to exchange solutions.
 
+**Parallelization reference:** The communication procedure (dual topology, three-source pheromone update, adaptive exchange cycle) is adapted from **Yang, Q., Fang, L., & Duan, X. (2016).** *RMACO: a randomly matched parallel ant colony optimization.* World Wide Web, 19(5), 1009–1022. The paper addresses TSP with MMAS and MPI; we adapt the procedure for Sudoku with ACS and threads. See **RMACO_PARALLEL_ADAPTATION.md** for the paper-to-code mapping.
+
 ## Architecture
 
 ### High-Level Structure
@@ -230,9 +232,9 @@ On communication intervals (when `iter % interval == 0`), this update **REPLACES
 
 ```
 Equation:
-  τ_ij(t+1) = (1-ρ_comm)·τ_ij(t) + Δτ_ij
+  τ_ij(t+1) = (1-ρ)·τ_ij(t) + ρ·Δτ_ij
   where Δτ_ij = Δτ_ij^1 + Δτ_ij^2 + Δτ_ij^3
-  and ρ_comm = 0.05 (communication evaporation rate, lighter than standard ρ = 0.9)
+  and ρ is the same ACS parameter (default 0.9) as the standard update
 
 Sources:
   Δτ_ij^1: Local iteration-best
@@ -289,11 +291,10 @@ void SubColony::UpdatePheromoneWithCommunication()
         }
         
         // Apply evaporation and add contributions ONLY to [cell, digit] 
-        // pairs that have deposits
-        // Uses rho_comm = 0.05 (lighter evaporation for additive reinforcement)
+        // pairs that have deposits (uses same rho as standard ACS update)
         for (int j = 0; j < numUnits; j++) {
             if (hasContribution[j]) {
-                pher[i][j] = pher[i][j] * (1.0f - rho_comm) + contributions[j];
+                pher[i][j] = pher[i][j] * (1.0f - rho) + rho * contributions[j];
             }
         }
     }
@@ -311,7 +312,7 @@ void SubColony::UpdatePheromoneWithCommunication()
 
 ```
 if (iter % interval == 0):
-    UpdatePheromoneWithCommunication()  // Three-source only (uses rho_comm = 0.05)
+    UpdatePheromoneWithCommunication()  // Three-source only (uses same rho as standard)
     // bestPher NOT decayed here (not used in this update)
 else:
     UpdatePheromone()  // Standard Algorithm 0 only (uses rho = 0.9)
@@ -433,9 +434,8 @@ if (arrived == numSubColonies) {
 | `--ants` | 10* | Number of ants per sub-colony |
 | `--timeout` | 120 | Maximum time in seconds |
 | `--q0` | 0.9 | Exploitation vs exploration (90% greedy) |
-| `--rho` | 0.9 | Standard Algorithm 0 pheromone evaporation rate |
-| `--rhocomm` | 0.05 | Communication update pheromone evaporation rate |
-| `--evap` | 0.005 | Best-solution pheromone decay rate |
+| `--rho` | 0.9 | Pheromone evaporation rate (used for both standard and communication updates) |
+| `--evap` | 0.005 | Best value evaporation (BVE) decay rate |
 
 \***Recommended**: Use 30 ants per colony for better performance on hard puzzles. With only 10 ants, pheromone reinforcement is weak.
 

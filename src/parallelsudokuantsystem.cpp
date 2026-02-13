@@ -1,17 +1,14 @@
 /*******************************************************************************
  * PARALLEL ANT COLONY SYSTEM FOR SUDOKU - ALGORITHM 2
- * 
- * This implementation uses multiple sub-colonies running in parallel threads.
- * Each sub-colony maintains its own pheromone matrix and ant population.
- * 
- * Key Features:
- * - Multi-threaded execution (one thread per sub-colony)
- * - Two communication topologies:
- *   1. Ring topology: iteration-best solutions
- *   2. Random topology: best-so-far solutions
- * - Three-source pheromone update (local + 2 received solutions)
- * - Timeout-based termination (default 120 seconds)
- * - Immediate stop upon finding complete solution
+ * Per-colony ACS core: Lloyd & Amos, IEEE Trans. on Games (2021). See ACO_PAPER_VERIFICATION.md.
+ * Parallelization (ring + random match, three-source update, adaptive interval): Yang et al.,
+ * "RMACO: a randomly matched parallel ant colony optimization," World Wide Web (2016). See RMACO_PARALLEL_ADAPTATION.md.
+ *
+ * Multiple sub-colonies in parallel threads; each has its own pheromone matrix and ants.
+ * - Ring topology: iteration-best to (i+1) mod n
+ * - Random topology: best-so-far via match-array (random permutation)
+ * - Three-source pheromone: Delta_tau^1 (local) + Delta_tau^2 (ring) + Delta_tau^3 (random)
+ * - Adaptive exchange: interval 100 when iter < 200, else 10
  ******************************************************************************/
 
 #include "parallelsudokuantsystem.h"
@@ -150,21 +147,12 @@ void SubColony::UpdatePheromone()
 }
 
 // ============================================================================
-// THREE-SOURCE PHEROMONE UPDATE FOR COMMUNICATION
+// THREE-SOURCE PHEROMONE UPDATE (Yang et al. RMACO Eq. 5)
 // ============================================================================
-// This implements the parallel ACS pheromone update with THREE sources.
-// Called ONLY after communication exchanges.
-//
-// EQUATION: τ_ij(t+1) = (1-ρ)·τ_ij(t) + ρ(Δτ_ij^1 + Δτ_ij^2 + Δτ_ij^3)
-//           where ρ is the rate of pheromone evaporation (same as standard ACS)
-//           and Δτ_ij = Δτ_ij^1 + Δτ_ij^2 + Δτ_ij^3
-//
-// SOURCE 1 (Δτ_ij^1): Local iteration-best (this colony's best this iteration)
-// SOURCE 2 (Δτ_ij^2): Received iteration-best (from ring topology neighbor)
-// SOURCE 3 (Δτ_ij^3): Received best-so-far (from random topology partner)
-//
-// SELECTIVE EVAPORATION: Only applies evaporation to [cell,digit] pairs that
-//                        receive pheromone deposits (not all cells)
+// Called ONLY after communication. τ_ij(t+1) = (1-ρ)·τ_ij(t) + ρ·Δτ_ij,
+// Δτ_ij = Δτ_ij^1 + Δτ_ij^2 + Δτ_ij^3 (ring iteration-best, random best-so-far).
+// SOURCE 1: local iteration-best; 2: received iteration-best (ring); 3: received best-so-far (match).
+// Selective evaporation: only [cell,digit] pairs that receive deposits are updated.
 // ============================================================================
 void SubColony::UpdatePheromoneWithCommunication()
 {
@@ -351,6 +339,7 @@ ParallelSudokuAntSystem::~ParallelSudokuAntSystem()
 		delete colony;
 }
 
+// Yang et al. RMACO: adaptive exchange cycle (Corollary 3). Before 200 iters: long interval; after: short.
 int ParallelSudokuAntSystem::CalculateInterval(int iteration)
 {
 	if (iteration < 200)
@@ -359,22 +348,20 @@ int ParallelSudokuAntSystem::CalculateInterval(int iteration)
 		return 10;
 }
 
+// Yang et al. RMACO: match-array = random permutation of [0..n-1]; used for best-so-far exchange.
 std::vector<int> ParallelSudokuAntSystem::GenerateMatchArray()
 {
-	// Generate a random permutation of colony IDs
 	std::vector<int> matchArray(numSubColonies);
-	std::iota(matchArray.begin(), matchArray.end(), 0); // Fill with 0, 1, 2, ..., n-1
+	std::iota(matchArray.begin(), matchArray.end(), 0);
 	std::shuffle(matchArray.begin(), matchArray.end(), masterRandGen);
 	return matchArray;
 }
 
 // ============================================================================
-// COMMUNICATION TOPOLOGY 1: Ring Network
+// COMMUNICATION TOPOLOGY 1: Ring (Yang et al. RMACO Fig. 1 – iteration-best)
 // ============================================================================
-// Each colony i sends its iteration-best solution to colony (i+1) mod n
-// This ensures every colony receives fresh information from a neighbor
-// 
-// Example with 4 colonies:  0 → 1 → 2 → 3 → 0 (ring)
+// Colony i sends iteration-best to (i+1) mod n. Used for Delta_tau^2.
+// Example: 0 → 1 → 2 → 3 → 0
 // ============================================================================
 void ParallelSudokuAntSystem::CommunicateRingTopology()
 {
@@ -395,18 +382,10 @@ void ParallelSudokuAntSystem::CommunicateRingTopology()
 }
 
 // ============================================================================
-// COMMUNICATION TOPOLOGY 2: Random Network
+// COMMUNICATION TOPOLOGY 2: Randomly matched (Yang et al. RMACO Fig. 1 – best-so-far)
 // ============================================================================
-// Colonies are randomly shuffled each communication cycle, then each colony
-// receives the best-so-far solution from its predecessor in the shuffled order.
-//
-// This provides diversity - different pairings each time!
-//
-// Example: matchArray = [2, 0, 3, 1] means:
-//   Colony 2 receives from Colony 1
-//   Colony 0 receives from Colony 2  
-//   Colony 3 receives from Colony 0
-//   Colony 1 receives from Colony 3
+// Colony matchArray[i] receives best-so-far from matchArray[(i+n-1)%n]. Used for Delta_tau^3.
+// Example: matchArray = [2,0,3,1] => 2←1, 0←2, 3←0, 1←3
 // ============================================================================
 void ParallelSudokuAntSystem::CommunicateRandomTopology(const std::vector<int>& matchArray)
 {

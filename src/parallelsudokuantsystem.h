@@ -132,7 +132,7 @@ private:
 	void ExecuteMasterThreadTasks(const Board& puzzle);
 	void ExecuteWorkerThreadWait(std::unique_lock<std::mutex>& lock);
 	
-	int saFrequency;  // Frequency of Simulated Annealing application (0 = disabled)
+	int saFrequency;  // SA frequency (0 = disabled). Paper: sa_freq (Stodola et al.). Set from --safreq; SA every saFrequency iters.
 	bool saAlwaysAccept; // If true, always accept SA solution regardless of quality
 	
 public:

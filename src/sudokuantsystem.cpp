@@ -1,3 +1,5 @@
+// Single-colony ACS for Sudoku. Algorithm follows Lloyd & Amos, "Solving Sudoku with
+// Ant Colony Optimization," IEEE Trans. on Games (2021). See ACO_PAPER_VERIFICATION.md.
 #include "sudokuantsystem.h"
 #include "simulatedannealing.h"
 #include <iostream>
@@ -21,6 +23,7 @@ void SudokuAntSystem::ClearPheromone()
 	delete[] pher;
 }
 
+// Delta-tau for best solution: c/(c-f) (Lloyd & Amos Eq. 5)
 float SudokuAntSystem::PherAdd( int cellsFilled)
 {
 	return numCells / (float)(numCells - cellsFilled);
@@ -37,6 +40,7 @@ void SudokuAntSystem::UpdatePheromone()
 	}
 }
 
+// ACS local update (Lloyd & Amos Eq. 3): tau_is <- (1-xi)*tau_is + xi*tau0, xi=0.1
 void SudokuAntSystem::LocalPheromoneUpdate(int iCell, int iChoice)
 {
 	pher[iCell][iChoice] = pher[iCell][iChoice] * 0.9f + pher0*0.1f;
@@ -137,8 +141,8 @@ bool SudokuAntSystem::Solve(const Board& puzzle, float maxTime )
 		// Only update pheromone and increment iteration if not solved
 		if (!solved)
 		{
-			UpdatePheromone();
-			bestPher *= (1.0f - bestEvap);
+			UpdatePheromone();  // Eq. 6: only best-so-far; no global evaporation elsewhere
+			bestPher *= (1.0f - bestEvap);  // BVE Eq. 7: Delta_tau_best decay (evap = rhoBVE)
 			++iter;
 		}
 		// check timer every 100 iterations
