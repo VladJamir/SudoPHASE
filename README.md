@@ -1,4 +1,4 @@
-# MT-ACS-RING: Multi-Threaded Ant Colony System for Sudoku
+# MT-CP-ACS-SA: Multi-Threaded ACO-SA for Sudoku
 
 A C++ Sudoku solver based on **Ant Colony Optimization (ACS)** with **Simulated Annealing (SA)** and **parallel multi-colony** search. The parallel variant uses a ring topology and random matching for pheromone exchange between sub-colonies (RMACO-style).
 
